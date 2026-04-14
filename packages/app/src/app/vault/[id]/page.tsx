@@ -41,6 +41,7 @@ import {
   parseAnchorError,
   cn,
   decimalToSmallestUnit,
+  isValidSolanaAddress,
 } from "@/lib/utils";
 import { TOKEN_MINTS, NATIVE_SOL_MINT } from "@deadswitch/sdk";
 import {
@@ -49,7 +50,9 @@ import {
   buildCancelVaultTx,
   buildTopUpVaultTx,
   type UpdateVaultParams,
+  type BeneficiaryInput,
 } from "@/lib/solana/instructions";
+import { syncVaultToDb } from "@/lib/sync";
 
 /** Timing presets (duplicated from create page for use in settings) */
 const TIMING_PRESETS = [
@@ -126,6 +129,14 @@ export default function VaultDetailPage({
       await connection.confirmTransaction(signature, "confirmed");
       showToast("confirmed", "Heartbeat recorded successfully!", signature);
 
+      // Sync heartbeat to DB (non-blocking)
+      syncVaultToDb({
+        vaultPubkey: vault.pubkey,
+        activityType: "manual",
+        txSignature: signature,
+        description: "Manual heartbeat confirmed by vault owner",
+      });
+
       // Set 30-second cooldown to prevent spam
       setHeartbeatCooldown(true);
       setTimeout(() => setHeartbeatCooldown(false), 30_000);
@@ -171,6 +182,15 @@ export default function VaultDetailPage({
 
       await connection.confirmTransaction(signature, "confirmed");
       showToast("confirmed", "Vault cancelled. Assets returned to your wallet.", signature);
+
+      // Sync cancellation to DB (non-blocking)
+      syncVaultToDb({
+        vaultPubkey: vault.pubkey,
+        activityType: "cancellation",
+        txSignature: signature,
+        description: "Vault cancelled by owner — assets returned",
+      });
+
       setShowCancelModal(false);
       mutate();
     } catch (err) {
@@ -592,6 +612,48 @@ function VaultSettings({
   const [editGraceDays, setEditGraceDays] = useState(vault.gracePeriodDays);
   const [editCrankFee, setEditCrankFee] = useState(vault.crankFeeBps);
 
+  // Beneficiary editing state (FIX 3)
+  const [editBeneficiaries, setEditBeneficiaries] = useState<BeneficiaryEntry[]>(
+    vault.beneficiaries.map((b) => ({
+      name: b.name,
+      wallet: b.wallet,
+      shareBps: b.shareBps,
+    }))
+  );
+
+  /** Check if beneficiaries have changed from the vault's current values */
+  const hasBeneficiaryChanges = (() => {
+    if (editBeneficiaries.length !== vault.beneficiaries.length) return true;
+    return editBeneficiaries.some((eb, i) => {
+      const vb = vault.beneficiaries[i];
+      return eb.name !== vb.name || eb.wallet !== vb.wallet || eb.shareBps !== vb.shareBps;
+    });
+  })();
+
+  /** Validate beneficiaries: shares total 10000, at least 1, valid wallets */
+  const beneficiariesValid = (() => {
+    if (editBeneficiaries.length < 1 || editBeneficiaries.length > 10) return false;
+    const totalBps = editBeneficiaries.reduce((s, b) => s + b.shareBps, 0);
+    if (totalBps !== 10_000) return false;
+    const ownerWallet = publicKey.toBase58();
+    const wallets = new Set<string>();
+    for (const b of editBeneficiaries) {
+      if (!b.name.trim() || b.name.length > 32) return false;
+      if (!isValidSolanaAddress(b.wallet)) return false;
+      if (b.wallet === ownerWallet) return false;
+      if (wallets.has(b.wallet)) return false;
+      wallets.add(b.wallet);
+      if (b.shareBps < 1 || b.shareBps > 9999) return false;
+    }
+    return true;
+  })();
+
+  // Alert notification state (FIX 2)
+  const [alertEmail, setAlertEmail] = useState("");
+  const [alertEnabled, setAlertEnabled] = useState(true);
+  const [alertLoading, setAlertLoading] = useState(false);
+  const [alertSaved, setAlertSaved] = useState(false);
+
   // Top-up deposits - use SDK token mints
   const topUpNetwork = (process.env.NEXT_PUBLIC_SOLANA_NETWORK as "devnet" | "mainnet") || "devnet";
   const [topUpDeposits, setTopUpDeposits] = useState<AssetDeposit[]>([
@@ -613,6 +675,46 @@ function VaultSettings({
     editGraceDays <= 30 &&
     editCrankFee >= 1 &&
     editCrankFee <= 500;
+
+  /** Email validation regex */
+  const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  /** Save alert settings to the API */
+  const handleSaveAlerts = useCallback(async () => {
+    if (alertLoading) return;
+    if (alertEmail && !isValidEmail(alertEmail)) {
+      showToast("error", "Please enter a valid email address.");
+      return;
+    }
+
+    setAlertLoading(true);
+    try {
+      const res = await fetch("/api/alerts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vaultPublicKey: vault.pubkey,
+          ownerPubkey: publicKey.toBase58(),
+          email: alertEmail || null,
+          enabled: alertEnabled,
+        }),
+      });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errBody.error || `Request failed: ${res.status}`);
+      }
+
+      setAlertSaved(true);
+      showToast("confirmed", "Alert settings saved.");
+      setTimeout(() => setAlertSaved(false), 3000);
+    } catch (err) {
+      console.error("Failed to save alert settings:", err);
+      showToast("error", err instanceof Error ? err.message : "Failed to save alert settings.");
+    } finally {
+      setAlertLoading(false);
+    }
+  }, [alertLoading, alertEmail, alertEnabled, vault.pubkey, publicKey, showToast]);
 
   const handleUpdateVault = useCallback(
     async (updates: UpdateVaultParams) => {
@@ -639,6 +741,15 @@ function VaultSettings({
 
         await connection.confirmTransaction(signature, "confirmed");
         showToast("confirmed", "Vault updated successfully!", signature);
+
+        // Sync update to DB (non-blocking)
+        syncVaultToDb({
+          vaultPubkey: vault.pubkey,
+          activityType: "update",
+          txSignature: signature,
+          description: "Vault settings updated by owner",
+        });
+
         mutate();
       } catch (err) {
         console.error("Update failed:", err);
@@ -687,6 +798,14 @@ function VaultSettings({
 
       await connection.confirmTransaction(signature, "confirmed");
       showToast("confirmed", "Assets deposited successfully!", signature);
+
+      // Sync top-up to DB (non-blocking)
+      syncVaultToDb({
+        vaultPubkey: vault.pubkey,
+        activityType: "top_up",
+        txSignature: signature,
+        description: "Assets deposited into vault",
+      });
 
       // Reset deposit inputs
       setTopUpDeposits((prev) => prev.map((d) => ({ ...d, amount: "" })));
@@ -763,6 +882,45 @@ function VaultSettings({
         )}
       </div>
 
+      {/* Beneficiaries (FIX 3) */}
+      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5 space-y-4">
+        <h3 className="text-sm font-semibold text-white">Beneficiaries</h3>
+        <p className="text-xs text-gray-400">
+          Update who receives your assets and their share percentages. Shares must total exactly 100%.
+        </p>
+
+        <BeneficiaryForm
+          beneficiaries={editBeneficiaries}
+          onChange={setEditBeneficiaries}
+          ownerWallet={publicKey.toBase58()}
+        />
+
+        {hasBeneficiaryChanges && beneficiariesValid && (
+          <button
+            type="button"
+            onClick={() =>
+              handleUpdateVault({
+                beneficiaries: editBeneficiaries.map((b) => ({
+                  wallet: new PublicKey(b.wallet),
+                  shareBps: b.shareBps,
+                  name: b.name,
+                })),
+              })
+            }
+            disabled={isUpdating}
+            className="rounded-lg bg-[#00ff88] px-4 py-2 text-sm font-semibold text-black hover:bg-[#00ff88]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00ff88]"
+          >
+            {isUpdating ? "Updating..." : "Update Beneficiaries"}
+          </button>
+        )}
+
+        {hasBeneficiaryChanges && !beneficiariesValid && (
+          <p className="text-xs text-red-400">
+            Please ensure all fields are valid, shares total 100%, and no wallet duplicates or self-assignment.
+          </p>
+        )}
+      </div>
+
       {/* Timing settings */}
       <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5 space-y-6">
         <h3 className="text-sm font-semibold text-white">Timing Settings</h3>
@@ -827,6 +985,56 @@ function VaultSettings({
             {isUpdating ? "Depositing..." : "Deposit Assets"}
           </button>
         )}
+      </div>
+
+      {/* Alert Notifications (FIX 2) */}
+      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5 space-y-4">
+        <h3 className="text-sm font-semibold text-white">Alert Notifications</h3>
+        <p className="text-xs text-gray-400">
+          Get email alerts when your vault approaches its inactivity threshold.
+        </p>
+
+        <div>
+          <label htmlFor="alert-email" className="block text-xs text-gray-500 mb-1">
+            Email Address
+          </label>
+          <input
+            id="alert-email"
+            type="email"
+            value={alertEmail}
+            onChange={(e) => {
+              setAlertEmail(e.target.value);
+              setAlertSaved(false);
+            }}
+            placeholder="you@example.com"
+            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#00ff88]/50 focus:outline-none focus:ring-1 focus:ring-[#00ff88]/50"
+          />
+          {alertEmail && !isValidEmail(alertEmail) && (
+            <p className="mt-1 text-xs text-red-400">Please enter a valid email address.</p>
+          )}
+        </div>
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={alertEnabled}
+            onChange={(e) => {
+              setAlertEnabled(e.target.checked);
+              setAlertSaved(false);
+            }}
+            className="h-4 w-4 rounded border-white/20 bg-white/5 text-[#00ff88] focus:ring-[#00ff88]/50 focus:ring-offset-0"
+          />
+          <span className="text-sm text-gray-400">Enable email alerts</span>
+        </label>
+
+        <button
+          type="button"
+          onClick={handleSaveAlerts}
+          disabled={alertLoading || (alertEmail !== "" && !isValidEmail(alertEmail))}
+          className="rounded-lg bg-[#00ff88] px-4 py-2 text-sm font-semibold text-black hover:bg-[#00ff88]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00ff88]"
+        >
+          {alertLoading ? "Saving..." : alertSaved ? "Saved!" : "Save Alert Settings"}
+        </button>
       </div>
 
       {/* Danger zone */}

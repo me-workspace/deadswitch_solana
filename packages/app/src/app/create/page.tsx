@@ -27,7 +27,8 @@ import {
   decimalToSmallestUnit,
 } from "@/lib/utils";
 import { TOKEN_MINTS, NATIVE_SOL_MINT } from "@deadswitch/sdk";
-import { buildCreateVaultTx, type CreateVaultParams } from "@/lib/solana/instructions";
+import { buildCreateVaultTx, buildTopUpVaultTx, type CreateVaultParams, type SplDepositInput } from "@/lib/solana/instructions";
+import { PROGRAM_ID } from "@/lib/solana/program";
 
 const WalletMultiButton = dynamic(
   () =>
@@ -265,11 +266,63 @@ export default function CreateVaultPage() {
 
       // Derive the vault PDA to link to
       const { deriveVaultPDA } = await import("@deadswitch/sdk");
-      const PROGRAM_ID = new PublicKey("14S2ouXUde99HRRrSmMUcqMCUpMkd2NngjMmnz21mXKh");
       const [vaultPDA] = deriveVaultPDA(publicKey, vaultId, PROGRAM_ID);
 
       setCreatedVaultPubkey(vaultPDA.toBase58());
-      showToast("confirmed", "Vault created successfully!", signature);
+
+      // Chain SPL deposits if any
+      const splDeposits: SplDepositInput[] = deposits
+        .filter((d) => d.symbol !== "SOL" && parseFloat(d.amount) > 0)
+        .map((d) => ({
+          mint: new PublicKey(d.mint),
+          amount: new BN(decimalToSmallestUnit(d.amount, d.decimals)),
+        }));
+
+      let splDepositSuccess = false;
+
+      if (splDeposits.length > 0) {
+        showToast("pending", "Depositing tokens into vault...", signature);
+        try {
+          const topUpTx = await buildTopUpVaultTx(vaultPDA, publicKey, new BN(0), splDeposits);
+          topUpTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+          topUpTx.feePayer = publicKey;
+
+          const sim = await connection.simulateTransaction(topUpTx);
+          if (sim.value.err) {
+            throw new Error(`Simulation failed: ${JSON.stringify(sim.value.err)}`);
+          }
+
+          const topUpSig = await sendTransaction(topUpTx, connection);
+          await connection.confirmTransaction(topUpSig, "confirmed");
+          splDepositSuccess = true;
+          showToast("confirmed", "Vault created and tokens deposited!", topUpSig);
+        } catch (splErr) {
+          console.error("SPL deposit failed:", splErr);
+          showToast(
+            "confirmed",
+            "Vault created with SOL only. Token deposit failed — you can top up from the vault page.",
+            signature
+          );
+          // Non-blocking — vault is created with SOL only
+        }
+      } else {
+        showToast("confirmed", "Vault created successfully!", signature);
+      }
+
+      // Build assets list based on what was actually deposited
+      const depositedAssets = deposits
+        .filter((d) => {
+          if (parseFloat(d.amount) <= 0) return false;
+          // SOL is always deposited; SPL only if top-up succeeded
+          if (d.symbol === "SOL") return true;
+          return splDepositSuccess;
+        })
+        .map((d) => ({
+          mint: d.mint,
+          symbol: d.symbol,
+          amount: decimalToSmallestUnit(d.amount, d.decimals),
+          decimals: d.decimals,
+        }));
 
       // Sync vault to database (non-blocking)
       try {
@@ -290,14 +343,7 @@ export default function CreateVaultPage() {
               name: b.name,
               shareBps: b.shareBps,
             })),
-            assets: deposits
-              .filter((d) => parseFloat(d.amount) > 0)
-              .map((d) => ({
-                mint: d.mint,
-                symbol: d.symbol,
-                amount: decimalToSmallestUnit(d.amount, d.decimals),
-                decimals: d.decimals,
-              })),
+            assets: depositedAssets,
           }),
         });
       } catch (syncErr) {

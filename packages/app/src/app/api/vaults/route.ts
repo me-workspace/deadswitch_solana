@@ -42,7 +42,7 @@ const querySchema = z.object({
 // ---------------------------------------------------------------------------
 
 const ALLOWED_ORIGIN =
-  process.env.NEXT_PUBLIC_APP_URL || "https://onpay.id";
+  process.env.NEXT_PUBLIC_APP_URL || "https://deadswitch.xyz";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGIN,

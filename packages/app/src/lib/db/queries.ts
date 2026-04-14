@@ -424,6 +424,32 @@ export async function getActiveVaultsForAlerts(): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// Vault last activity update
+// ---------------------------------------------------------------------------
+
+/**
+ * Update the lastActivity timestamp for a vault by its internal ID.
+ * Called after a heartbeat is successfully recorded.
+ *
+ * @param vaultId - Internal vault UUID
+ * @param timestamp - The new lastActivity timestamp
+ */
+export async function updateVaultLastActivity(
+  vaultId: string,
+  timestamp: Date
+): Promise<void> {
+  const db = getDb();
+
+  await db
+    .update(vaults)
+    .set({
+      lastActivity: timestamp,
+      updatedAt: new Date(),
+    })
+    .where(eq(vaults.id, vaultId));
+}
+
+// ---------------------------------------------------------------------------
 // Maintenance
 // ---------------------------------------------------------------------------
 

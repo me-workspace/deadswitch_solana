@@ -7,6 +7,7 @@ import {
   markWebhookProcessed,
   getVaultsByOwner,
   logHeartbeat,
+  updateVaultLastActivity,
 } from "@/lib/db/queries";
 import { submitHeartbeatFromBackend } from "@/lib/solana/instructions";
 import { PROGRAM_ID } from "@/lib/solana/program";
@@ -205,6 +206,11 @@ export async function POST(request: NextRequest): Promise<Response> {
               description: `Auto-heartbeat from wallet activity (source: ${tx.type})`,
             }).catch((err) => {
               console.error("[webhook] Failed to log heartbeat:", err);
+            });
+
+            // Update vault lastActivity in DB (FIX 6)
+            await updateVaultLastActivity(vault.id, new Date()).catch((err) => {
+              console.error("[webhook] Failed to update vault lastActivity:", err);
             });
 
             console.info(
