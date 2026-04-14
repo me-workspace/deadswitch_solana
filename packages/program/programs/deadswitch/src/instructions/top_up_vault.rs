@@ -79,9 +79,15 @@ pub fn handler<'info>(
             DeadswitchError::NoAssets
         );
 
-        let _mint_info = &remaining[remaining_idx];
+        let mint_info = &remaining[remaining_idx];
         let owner_ata_info = &remaining[remaining_idx + 1];
         let vault_ata_info = &remaining[remaining_idx + 2];
+
+        // Validate that the mint account key matches the declared deposit mint
+        require!(
+            mint_info.key() == deposit.mint,
+            DeadswitchError::InvalidBeneficiary // mint mismatch
+        );
 
         require!(deposit.amount > 0, DeadswitchError::InsufficientDeposit);
 

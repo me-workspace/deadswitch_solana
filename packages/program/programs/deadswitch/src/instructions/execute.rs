@@ -46,8 +46,10 @@ pub struct ExecuteRedistribution<'info> {
 /// Same logic per token. Vault ATAs are closed after transfer.
 ///
 /// ## remaining_accounts layout:
-/// For each SPL token:
-///   [vault_ata, ...beneficiary_atas (num_beneficiaries), mint]
+/// First: beneficiary wallet accounts for SOL distribution (num_beneficiaries entries)
+///   [beneficiary_wallet_0, beneficiary_wallet_1, ..., beneficiary_wallet_n]
+/// Then for each SPL token (in order of vault.asset_configs, skipping SOL):
+///   [vault_ata, ben_ata_0, ben_ata_1, ..., ben_ata_n, crank_ata]
 pub fn handler<'info>(
     ctx: Context<'_, '_, 'info, 'info, ExecuteRedistribution<'info>>,
 ) -> Result<()> {

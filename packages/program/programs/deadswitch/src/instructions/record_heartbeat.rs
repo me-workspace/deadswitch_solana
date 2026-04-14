@@ -44,14 +44,10 @@ pub fn handler(ctx: Context<RecordHeartbeat>) -> Result<()> {
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // Heartbeat timestamp must not be in the future (with tolerance)
-    require!(
-        now <= now.checked_add(CLOCK_DRIFT_TOLERANCE).unwrap_or(i64::MAX),
-        DeadswitchError::FutureHeartbeat
-    );
-
-    // New timestamp must be newer than last_activity
-    // (Clock::get() should always be >= last_activity, but verify)
+    // Clock::get() returns the current slot's timestamp from the Solana runtime.
+    // It cannot be spoofed by the caller — only the validator sets it.
+    // We still verify monotonicity: new heartbeat must not be older than last_activity.
+    // This guards against edge cases like validator clock rollback.
     require!(
         now >= vault.last_activity,
         DeadswitchError::StaleHeartbeat
