@@ -19,6 +19,20 @@ export const metadata: Metadata = {
     description:
       "Non-custodial onchain inheritance protocol on Solana. Set it once, forget it.",
     type: "website",
+    siteName: "Deadswitch",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Deadswitch — Onchain Inheritance on Solana",
+    description:
+      "Non-custodial dead man's switch protocol. Automatically distribute your crypto to beneficiaries if your wallet becomes inactive.",
+  },
+  other: {
+    "theme-color": "#0a0a0a",
+    "mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-status-bar-style": "black-translucent",
   },
 };
 

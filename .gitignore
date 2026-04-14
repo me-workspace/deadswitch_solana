@@ -59,3 +59,5 @@ yarn-error.log*
 *.pem
 # Keep Anchor program keypair (it's a devnet deploy key, not a wallet)
 # packages/program/target/deploy/deadswitch-keypair.json is tracked
+# Allow .env.example files (they contain no actual secrets)
+!.env.example

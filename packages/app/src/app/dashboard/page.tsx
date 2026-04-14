@@ -52,7 +52,7 @@ export default function DashboardPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Your Vaults</h1>
           <p className="mt-1 text-sm text-gray-400">
@@ -101,12 +101,33 @@ export default function DashboardPage() {
 
       {/* Loading state */}
       {isLoading && vaults.length === 0 && !error && (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-8 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-48 animate-pulse rounded-xl border border-white/10 bg-white/[0.02]"
-            />
+              className="animate-pulse rounded-xl border border-white/10 bg-white/[0.02] p-5"
+              aria-hidden="true"
+            >
+              {/* Skeleton header */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="h-5 w-28 rounded bg-white/10" />
+                <div className="h-5 w-16 rounded-full bg-white/10" />
+              </div>
+              {/* Skeleton progress bar */}
+              <div className="h-2 w-full rounded-full bg-white/5 mb-4">
+                <div className="h-2 w-2/3 rounded-full bg-white/10" />
+              </div>
+              {/* Skeleton stats row */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="h-4 w-20 rounded bg-white/5" />
+                <div className="h-4 w-16 rounded bg-white/5" />
+              </div>
+              {/* Skeleton footer */}
+              <div className="flex items-center justify-between pt-3 border-t border-white/5">
+                <div className="h-3 w-24 rounded bg-white/5" />
+                <div className="h-3 w-12 rounded bg-white/5" />
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -136,7 +157,7 @@ export default function DashboardPage() {
 
       {/* Vault grid */}
       {vaults.length > 0 && (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-8 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {vaults.map((vault) => (
             <VaultCard
               key={vault.pubkey}

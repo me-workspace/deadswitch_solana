@@ -256,8 +256,8 @@ export default function VaultDetailPage({
       </div>
 
       {/* Tab navigation */}
-      <div className="border-b border-white/10 mb-6">
-        <nav className="flex gap-6" aria-label="Vault sections">
+      <div className="border-b border-white/10 mb-6 overflow-x-auto scrollbar-none">
+        <nav className="flex gap-6 min-w-max" aria-label="Vault sections">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (

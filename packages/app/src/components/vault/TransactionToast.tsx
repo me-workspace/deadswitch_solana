@@ -101,7 +101,7 @@ export function TransactionToast({
         "fixed bottom-6 right-6 z-50 w-full max-w-sm rounded-xl border p-4 shadow-2xl transition-all duration-300",
         config.containerClass,
         isVisible
-          ? "translate-y-0 opacity-100"
+          ? "translate-y-0 opacity-100 animate-slide-in-right"
           : "translate-y-4 opacity-0"
       )}
       role="alert"

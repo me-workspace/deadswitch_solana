@@ -260,6 +260,56 @@ export default function CreateVaultPage() {
 
       setCreatedVaultPubkey(vaultPDA.toBase58());
       showToast("confirmed", "Vault created successfully!", signature);
+
+      // Sync vault to database (non-blocking)
+      try {
+        await fetch("/api/vaults/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            vaultPubkey: vaultPDA.toBase58(),
+            ownerPubkey: publicKey.toBase58(),
+            vaultIdOnchain: vaultId.toNumber(),
+            name: vaultName.trim(),
+            note: vaultNote.trim(),
+            inactivityWindowSecs: inactivityDays * 86_400,
+            gracePeriodSecs: graceDays * 86_400,
+            crankFeeBps,
+            beneficiaries: beneficiaries.map((b) => ({
+              wallet: b.wallet,
+              name: b.name,
+              shareBps: b.shareBps,
+            })),
+            assets: deposits
+              .filter((d) => parseFloat(d.amount) > 0)
+              .map((d) => ({
+                mint: d.mint,
+                symbol: d.symbol,
+                amount: String(
+                  Math.floor(parseFloat(d.amount) * Math.pow(10, d.decimals))
+                ),
+                decimals: d.decimals,
+              })),
+          }),
+        });
+      } catch (syncErr) {
+        console.error("Failed to sync vault to DB:", syncErr);
+        // Non-blocking — vault is already onchain
+      }
+
+      // Register Helius webhook for auto-heartbeat (non-blocking)
+      try {
+        await fetch("/api/webhooks/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ownerWallet: publicKey.toBase58(),
+          }),
+        });
+      } catch (webhookErr) {
+        console.error("Failed to register webhook:", webhookErr);
+        // Non-blocking — user can still send manual heartbeats
+      }
     } catch (err) {
       console.error("Vault creation failed:", err);
       showToast("error", parseAnchorError(err));
@@ -645,13 +695,13 @@ export default function CreateVaultPage() {
       </div>
 
       {/* Navigation buttons */}
-      <div className="mt-6 flex items-center justify-between">
+      <div className="mt-6 flex items-center justify-between gap-3">
         <button
           type="button"
           onClick={goBack}
           disabled={currentStep === 1}
           className={cn(
-            "inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2.5 text-sm text-gray-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00ff88]",
+            "inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-3 text-sm text-gray-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00ff88] min-h-[44px]",
             currentStep === 1
               ? "opacity-0 pointer-events-none"
               : "hover:bg-white/5 hover:text-white"
@@ -666,7 +716,7 @@ export default function CreateVaultPage() {
             type="button"
             onClick={goNext}
             disabled={!canProceed}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#00ff88] px-5 py-2.5 text-sm font-semibold text-black transition-all hover:bg-[#00ff88]/90 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00ff88] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#00ff88] px-5 py-3 text-sm font-semibold text-black transition-all hover:bg-[#00ff88]/90 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00ff88] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a] min-h-[44px]"
           >
             Next
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -676,7 +726,7 @@ export default function CreateVaultPage() {
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#00ff88] px-6 py-2.5 text-sm font-semibold text-black transition-all hover:bg-[#00ff88]/90 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00ff88] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#00ff88] px-6 py-3 text-sm font-semibold text-black transition-all hover:bg-[#00ff88]/90 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00ff88] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a] min-h-[44px]"
           >
             {isSubmitting ? (
               <>
