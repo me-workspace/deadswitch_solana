@@ -87,7 +87,9 @@ export default function DashboardPage() {
             <p className="text-sm text-red-400">
               Failed to load vaults. Please try again.
             </p>
-            <p className="mt-0.5 text-xs text-red-400/60">{error.message}</p>
+            <p className="mt-0.5 text-xs text-red-400/60">
+              Failed to load vaults. Please try again.
+            </p>
           </div>
           <button
             type="button"

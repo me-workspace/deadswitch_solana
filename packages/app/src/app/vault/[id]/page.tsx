@@ -40,7 +40,9 @@ import {
   formatSol,
   parseAnchorError,
   cn,
+  decimalToSmallestUnit,
 } from "@/lib/utils";
+import { TOKEN_MINTS, NATIVE_SOL_MINT } from "@deadswitch/sdk";
 import {
   buildRecordHeartbeatTx,
   buildUpdateVaultTx,
@@ -88,6 +90,7 @@ export default function VaultDetailPage({
 
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [isSendingHeartbeat, setIsSendingHeartbeat] = useState(false);
+  const [heartbeatCooldown, setHeartbeatCooldown] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
@@ -99,7 +102,7 @@ export default function VaultDetailPage({
   // -------------------------------------------------------------------------
 
   const handleSendHeartbeat = useCallback(async () => {
-    if (!publicKey || !connected || !vault || isSendingHeartbeat) return;
+    if (!publicKey || !connected || !vault || isSendingHeartbeat || heartbeatCooldown) return;
 
     setIsSendingHeartbeat(true);
     showToast("pending", "Sending heartbeat... Please approve in your wallet.");
@@ -110,11 +113,23 @@ export default function VaultDetailPage({
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
       tx.feePayer = publicKey;
 
+      // Simulate first to catch errors without spending gas
+      const simulation = await connection.simulateTransaction(tx);
+      if (simulation.value.err) {
+        const simError = JSON.stringify(simulation.value.err);
+        throw new Error(`Transaction simulation failed: ${simError}`);
+      }
+
       const signature = await sendTransaction(tx, connection);
       showToast("pending", "Heartbeat sent. Waiting for confirmation...", signature);
 
       await connection.confirmTransaction(signature, "confirmed");
       showToast("confirmed", "Heartbeat recorded successfully!", signature);
+
+      // Set 30-second cooldown to prevent spam
+      setHeartbeatCooldown(true);
+      setTimeout(() => setHeartbeatCooldown(false), 30_000);
+
       mutate();
     } catch (err) {
       console.error("Heartbeat failed:", err);
@@ -122,7 +137,7 @@ export default function VaultDetailPage({
     } finally {
       setIsSendingHeartbeat(false);
     }
-  }, [publicKey, connected, vault, isSendingHeartbeat, connection, sendTransaction, showToast, mutate]);
+  }, [publicKey, connected, vault, isSendingHeartbeat, heartbeatCooldown, connection, sendTransaction, showToast, mutate]);
 
   // -------------------------------------------------------------------------
   // Cancel vault action
@@ -143,6 +158,13 @@ export default function VaultDetailPage({
       const tx = await buildCancelVaultTx(vaultPubkey, publicKey, assetMints);
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
       tx.feePayer = publicKey;
+
+      // Simulate first to catch errors without spending gas
+      const simulation = await connection.simulateTransaction(tx);
+      if (simulation.value.err) {
+        const simError = JSON.stringify(simulation.value.err);
+        throw new Error(`Transaction simulation failed: ${simError}`);
+      }
 
       const signature = await sendTransaction(tx, connection);
       showToast("pending", "Cancel transaction sent. Waiting for confirmation...", signature);
@@ -293,13 +315,18 @@ export default function VaultDetailPage({
                 <button
                   type="button"
                   onClick={handleSendHeartbeat}
-                  disabled={isSendingHeartbeat}
+                  disabled={isSendingHeartbeat || heartbeatCooldown}
                   className="inline-flex items-center gap-2 rounded-lg bg-[#00ff88] px-4 py-2 text-sm font-semibold text-black transition-all hover:bg-[#00ff88]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00ff88]"
                 >
                   {isSendingHeartbeat ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                       Sending...
+                    </>
+                  ) : heartbeatCooldown ? (
+                    <>
+                      <Clock className="h-4 w-4" aria-hidden="true" />
+                      Cooldown...
                     </>
                   ) : (
                     <>
@@ -453,13 +480,18 @@ export default function VaultDetailPage({
               <button
                 type="button"
                 onClick={handleSendHeartbeat}
-                disabled={isSendingHeartbeat}
+                disabled={isSendingHeartbeat || heartbeatCooldown}
                 className="inline-flex items-center gap-2 rounded-lg bg-[#00ff88] px-4 py-2 text-sm font-semibold text-black transition-all hover:bg-[#00ff88]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00ff88]"
               >
                 {isSendingHeartbeat ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                     Sending...
+                  </>
+                ) : heartbeatCooldown ? (
+                  <>
+                    <Clock className="h-4 w-4" aria-hidden="true" />
+                    Cooldown...
                   </>
                 ) : (
                   <>
@@ -560,11 +592,12 @@ function VaultSettings({
   const [editGraceDays, setEditGraceDays] = useState(vault.gracePeriodDays);
   const [editCrankFee, setEditCrankFee] = useState(vault.crankFeeBps);
 
-  // Top-up deposits
+  // Top-up deposits - use SDK token mints
+  const topUpNetwork = (process.env.NEXT_PUBLIC_SOLANA_NETWORK as "devnet" | "mainnet") || "devnet";
   const [topUpDeposits, setTopUpDeposits] = useState<AssetDeposit[]>([
-    { mint: PublicKey.default.toBase58(), symbol: "SOL", amount: "", decimals: 9 },
-    { mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU", symbol: "USDC", amount: "", decimals: 6 },
-    { mint: "EJwZgeZrdC8TXTQbQBoL6bfuAnFUQcWQoKjE2RwW5Qo5", symbol: "USDT", amount: "", decimals: 6 },
+    { mint: NATIVE_SOL_MINT.toBase58(), symbol: "SOL", amount: "", decimals: 9 },
+    { mint: TOKEN_MINTS[topUpNetwork].USDC.toBase58(), symbol: "USDC", amount: "", decimals: 6 },
+    { mint: TOKEN_MINTS[topUpNetwork].USDT.toBase58(), symbol: "USDT", amount: "", decimals: 6 },
   ]);
 
   const hasNameChanges = editName !== vault.name || editNote !== vault.note;
@@ -594,6 +627,13 @@ function VaultSettings({
         tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
         tx.feePayer = publicKey;
 
+        // Simulate first to catch errors without spending gas
+        const simulation = await connection.simulateTransaction(tx);
+        if (simulation.value.err) {
+          const simError = JSON.stringify(simulation.value.err);
+          throw new Error(`Transaction simulation failed: ${simError}`);
+        }
+
         const signature = await sendTransaction(tx, connection);
         showToast("pending", "Update sent. Waiting for confirmation...", signature);
 
@@ -622,22 +662,25 @@ function VaultSettings({
     try {
       const vaultPubkey = new PublicKey(vault.pubkey);
       const solDeposit = topUpDeposits.find((d) => d.symbol === "SOL");
-      const solAmount = new BN(
-        Math.floor((parseFloat(solDeposit?.amount || "0") || 0) * 1e9)
-      );
+      const solAmount = new BN(decimalToSmallestUnit(solDeposit?.amount || "0", 9));
 
       const splDeposits = topUpDeposits
         .filter((d) => d.symbol !== "SOL" && parseFloat(d.amount) > 0)
         .map((d) => ({
           mint: new PublicKey(d.mint),
-          amount: new BN(
-            Math.floor((parseFloat(d.amount) || 0) * Math.pow(10, d.decimals))
-          ),
+          amount: new BN(decimalToSmallestUnit(d.amount, d.decimals)),
         }));
 
       const tx = await buildTopUpVaultTx(vaultPubkey, publicKey, solAmount, splDeposits);
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
       tx.feePayer = publicKey;
+
+      // Simulate first to catch errors without spending gas
+      const simulation = await connection.simulateTransaction(tx);
+      if (simulation.value.err) {
+        const simError = JSON.stringify(simulation.value.err);
+        throw new Error(`Transaction simulation failed: ${simError}`);
+      }
 
       const signature = await sendTransaction(tx, connection);
       showToast("pending", "Deposit sent. Waiting for confirmation...", signature);

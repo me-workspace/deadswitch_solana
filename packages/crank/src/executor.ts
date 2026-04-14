@@ -55,30 +55,41 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Whether to execute vaults that only contain SPL tokens (no SOL profit) */
+const EXECUTE_SPL_ONLY_VAULTS = true;
+
 /**
  * Estimate the crank fee reward in lamports for executing a vault.
  *
- * Only considers the SOL portion of the vault (native SOL asset config).
- * SPL token crank fees are not converted to lamports for this estimate.
+ * Considers both SOL and SPL token portions of the vault.
+ * If the vault has SPL tokens but no SOL, returns 1 to indicate
+ * it should still be executed (when EXECUTE_SPL_ONLY_VAULTS is true).
  *
  * @param vaultData - The deserialized vault account data
- * @returns Estimated crank fee in lamports (SOL portion only)
+ * @returns Estimated crank fee in lamports (SOL portion), or 1 if SPL-only vault
  */
 function estimateCrankFeeLamports(vaultData: VaultAccountData): bigint {
   let totalSolLamports = BigInt(0);
+  let hasSplTokens = false;
 
   const numAssets = vaultData.numAssets;
   for (let i = 0; i < numAssets; i++) {
     const asset = vaultData.assetConfigs[i];
-    // Native SOL is represented by PublicKey.default (all zeros)
     if (asset.mint.equals(NATIVE_SOL_MINT)) {
       totalSolLamports += BigInt(asset.amount.toString());
+    } else if (BigInt(asset.amount.toString()) > BigInt(0)) {
+      hasSplTokens = true;
     }
   }
 
   // crankFeeBps is in basis points (1 bps = 0.01%)
   const feeLamports =
     (totalSolLamports * BigInt(vaultData.crankFeeBps)) / BigInt(10_000);
+
+  // If vault has SPL tokens but no SOL, return 1 to indicate it should still be executed
+  if (feeLamports === BigInt(0) && hasSplTokens && EXECUTE_SPL_ONLY_VAULTS) {
+    return BigInt(1);
+  }
 
   return feeLamports;
 }

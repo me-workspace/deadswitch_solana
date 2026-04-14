@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::associated_token::{self, AssociatedToken};
 use anchor_spl::token::{self, Token, Transfer};
 
 use crate::constants::*;
@@ -73,10 +73,12 @@ pub fn handler<'info>(
     let remaining = &ctx.remaining_accounts;
     let mut remaining_idx = 0;
 
+    let vault_key = vault.key();
+
     for deposit in spl_deposits.iter() {
         require!(
             remaining_idx + 2 < remaining.len(),
-            DeadswitchError::NoAssets
+            DeadswitchError::InsufficientRemainingAccounts
         );
 
         let mint_info = &remaining[remaining_idx];
@@ -86,10 +88,30 @@ pub fn handler<'info>(
         // Validate that the mint account key matches the declared deposit mint
         require!(
             mint_info.key() == deposit.mint,
-            DeadswitchError::InvalidBeneficiary // mint mismatch
+            DeadswitchError::MintMismatch
         );
 
         require!(deposit.amount > 0, DeadswitchError::InsufficientDeposit);
+
+        // Validate vault ATA is the canonical ATA for vault PDA + mint
+        let expected_vault_ata = associated_token::get_associated_token_address(
+            &vault_key,
+            &deposit.mint,
+        );
+        require!(
+            vault_ata_info.key() == expected_vault_ata,
+            DeadswitchError::InvalidAssociatedTokenAccount
+        );
+
+        // Validate owner ATA is the canonical ATA for owner + mint
+        let expected_owner_ata = associated_token::get_associated_token_address(
+            &ctx.accounts.owner.key(),
+            &deposit.mint,
+        );
+        require!(
+            owner_ata_info.key() == expected_owner_ata,
+            DeadswitchError::InvalidAssociatedTokenAccount
+        );
 
         // Transfer SPL tokens from owner ATA to vault ATA
         token::transfer(

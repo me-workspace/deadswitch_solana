@@ -3,7 +3,7 @@ import { PublicKey } from "@solana/web3.js";
 import { z } from "zod";
 import type { ApiResponse, ApiError } from "@deadswitch/sdk";
 import { getVaultByPubkey, logHeartbeat } from "@/lib/db/queries";
-import { getConnection } from "@/lib/solana/program";
+import { getConnection, PROGRAM_ID } from "@/lib/solana/program";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   const { vaultPublicKey, txSignature } = parsed.data;
 
-  // Verify the transaction exists onchain
+  // Verify the transaction exists onchain and targets the Deadswitch program
   try {
     const connection = getConnection();
     const txResult = await connection.getTransaction(txSignature, {
@@ -98,9 +98,33 @@ export async function POST(request: NextRequest): Promise<Response> {
       };
       return Response.json(error, { status: 400 });
     }
+
+    // Verify the transaction includes a Deadswitch program instruction
+    const accountKeys = txResult.transaction.message.getAccountKeys();
+    const programIdStr = PROGRAM_ID.toBase58();
+    let hasDeadswitchInstruction = false;
+
+    for (let i = 0; i < accountKeys.length; i++) {
+      if (accountKeys.get(i)?.toBase58() === programIdStr) {
+        hasDeadswitchInstruction = true;
+        break;
+      }
+    }
+
+    if (!hasDeadswitchInstruction) {
+      const error: ApiError = {
+        error: "Transaction does not interact with the Deadswitch program",
+        code: "INVALID_TX",
+      };
+      return Response.json(error, { status: 400 });
+    }
   } catch (err) {
     console.error("[heartbeat] Failed to verify tx onchain:", err);
-    // Continue anyway — we don't want to block the user if RPC is flaky
+    const error: ApiError = {
+      error: "Failed to verify transaction onchain. Please try again later.",
+      code: "VERIFICATION_ERROR",
+    };
+    return Response.json(error, { status: 502 });
   }
 
   // Look up the vault in DB

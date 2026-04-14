@@ -3,6 +3,8 @@
  * @module lib/utils
  */
 
+import { PublicKey } from "@solana/web3.js";
+
 /**
  * Truncate a Solana address for display.
  * @param address - Full base58 address string
@@ -129,14 +131,33 @@ export function cn(...classes: (string | boolean | undefined | null)[]): string 
 
 /**
  * Validate a Solana base58 public key string.
+ * Uses the actual PublicKey constructor for accurate validation.
  * @param address - String to validate
- * @returns True if valid base58 address of correct length
+ * @returns True if valid Solana public key
  */
 export function isValidSolanaAddress(address: string): boolean {
-  if (!address || typeof address !== "string") return false;
-  // Base58 characters: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
-  const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-  return base58Regex.test(address);
+  try {
+    new PublicKey(address);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Convert a decimal string amount to the smallest unit (lamports/raw amount).
+ * Avoids floating-point precision loss by using string manipulation.
+ * @param amount - Decimal string (e.g. "1.5")
+ * @param decimals - Number of decimal places (e.g. 9 for SOL, 6 for USDC)
+ * @returns String representation of the amount in smallest units
+ */
+export function decimalToSmallestUnit(amount: string, decimals: number): string {
+  if (!amount || amount === "0") return "0";
+  const [whole = "0", frac = ""] = amount.split(".");
+  const paddedFrac = frac.padEnd(decimals, "0").slice(0, decimals);
+  const raw = whole + paddedFrac;
+  // Remove leading zeros but keep at least "0"
+  return raw.replace(/^0+/, "") || "0";
 }
 
 /**

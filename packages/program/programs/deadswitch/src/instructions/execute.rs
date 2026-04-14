@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::associated_token::{self, AssociatedToken};
 use anchor_spl::token::{self, CloseAccount, Token, TokenAccount, Transfer};
 
 use crate::constants::*;
@@ -136,6 +136,10 @@ pub fn handler<'info>(
                     beneficiary_info.key() == *wallet,
                     DeadswitchError::InvalidBeneficiary
                 );
+                require!(
+                    beneficiary_info.is_writable,
+                    DeadswitchError::InvalidBeneficiary
+                );
 
                 **vault.to_account_info().try_borrow_mut_lamports()? -= amount;
                 **beneficiary_info.try_borrow_mut_lamports()? += amount;
@@ -169,12 +173,23 @@ pub fn handler<'info>(
         }
 
         // vault_ata
-        require!(ri < remaining.len(), DeadswitchError::NoAssets);
+        require!(ri < remaining.len(), DeadswitchError::InsufficientRemainingAccounts);
         let vault_ata_info = &remaining[ri];
         ri += 1;
 
         let vault_ata: Account<TokenAccount> =
             Account::try_from(vault_ata_info)?;
+
+        // Validate vault ATA ownership and mint
+        require!(
+            vault_ata.owner == vault.key(),
+            DeadswitchError::InvalidTokenAccountOwner
+        );
+        require!(
+            vault_ata.mint == asset.mint,
+            DeadswitchError::MintMismatch
+        );
+
         let total_tokens = vault_ata.amount;
 
         if total_tokens == 0 {
@@ -206,10 +221,26 @@ pub fn handler<'info>(
 
         // Distribute to each beneficiary's ATA
         let mut distributed_tokens: u64 = 0;
-        for (i, (_, share_bps)) in beneficiaries.iter().enumerate() {
-            require!(ri < remaining.len(), DeadswitchError::NoAssets);
+        for (i, (wallet, share_bps)) in beneficiaries.iter().enumerate() {
+            require!(ri < remaining.len(), DeadswitchError::InsufficientRemainingAccounts);
             let ben_ata_info = &remaining[ri];
             ri += 1;
+
+            // Validate beneficiary ATA is the canonical ATA for this wallet + mint
+            let expected_ben_ata = associated_token::get_associated_token_address(wallet, &asset.mint);
+            require!(
+                ben_ata_info.key() == expected_ben_ata,
+                DeadswitchError::InvalidAssociatedTokenAccount
+            );
+
+            // If account already exists, validate its mint
+            if ben_ata_info.owner == &token::ID && ben_ata_info.data_len() > 0 {
+                let ben_ata: Account<TokenAccount> = Account::try_from(ben_ata_info)?;
+                require!(
+                    ben_ata.mint == asset.mint,
+                    DeadswitchError::MintMismatch
+                );
+            }
 
             let amount = if i == num_beneficiaries - 1 {
                 distributable_tokens
@@ -245,9 +276,26 @@ pub fn handler<'info>(
 
         // Transfer crank fee tokens
         if token_crank_fee > 0 {
-            require!(ri < remaining.len(), DeadswitchError::NoAssets);
+            require!(ri < remaining.len(), DeadswitchError::InsufficientRemainingAccounts);
             let crank_ata_info = &remaining[ri];
             ri += 1;
+
+            // Validate crank ATA is canonical for crank + mint
+            let expected_crank_ata = associated_token::get_associated_token_address(
+                &ctx.accounts.crank.key(),
+                &asset.mint,
+            );
+            require!(
+                crank_ata_info.key() == expected_crank_ata,
+                DeadswitchError::InvalidAssociatedTokenAccount
+            );
+
+            // Validate crank ATA mint
+            let crank_ata: Account<TokenAccount> = Account::try_from(crank_ata_info)?;
+            require!(
+                crank_ata.mint == asset.mint,
+                DeadswitchError::MintMismatch
+            );
 
             token::transfer(
                 CpiContext::new_with_signer(

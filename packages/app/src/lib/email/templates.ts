@@ -234,15 +234,15 @@ export function getAlertSubject(
   threshold: 50 | 75 | 90 | 100,
   vaultName: string
 ): string {
-  const safe = vaultName.slice(0, 50);
+  const safeName = vaultName.replace(/[\r\n]/g, "").slice(0, 50);
   switch (threshold) {
     case 50:
-      return `Deadswitch: Inactivity notice for "${safe}"`;
+      return `Deadswitch: Inactivity notice for "${safeName}"`;
     case 75:
-      return `Deadswitch: Warning — "${safe}" at 75% inactivity`;
+      return `Deadswitch: Warning — "${safeName}" at 75% inactivity`;
     case 90:
-      return `URGENT: "${safe}" is almost triggered`;
+      return `URGENT: "${safeName}" is almost triggered`;
     case 100:
-      return `CRITICAL: Grace period active for "${safe}"`;
+      return `CRITICAL: Grace period active for "${safeName}"`;
   }
 }

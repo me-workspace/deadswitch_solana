@@ -4,7 +4,6 @@ import type { ApiResponse, ApiError } from "@deadswitch/sdk";
 import { validateWebhookSignature } from "@/lib/helius/webhook";
 import type { HeliusWebhookPayload } from "@/lib/helius/types";
 import {
-  isWebhookProcessed,
   markWebhookProcessed,
   getVaultsByOwner,
   logHeartbeat,
@@ -100,6 +99,12 @@ function extractOwnerCandidates(
  * Always returns 200 to prevent Helius from retrying.
  */
 export async function POST(request: NextRequest): Promise<Response> {
+  // Body size limit (1MB)
+  const contentLength = parseInt(request.headers.get("content-length") || "0");
+  if (contentLength > 1_048_576) {
+    return ok("payload_too_large");
+  }
+
   // Rate limiting
   const clientIp =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -137,26 +142,25 @@ export async function POST(request: NextRequest): Promise<Response> {
     return ok("empty_payload");
   }
 
+  // Cap the number of transactions processed per request
+  const txsToProcess = payload.slice(0, 50);
+
   // Process each transaction
-  for (const tx of payload) {
+  for (const tx of txsToProcess) {
     try {
-      // Idempotency check
+      // Idempotency check — atomic insert-or-skip
       if (!tx.signature) continue;
 
-      const alreadyProcessed = await isWebhookProcessed(tx.signature).catch(
+      const inserted = await markWebhookProcessed(tx.signature).catch(
         () => false
       );
-      if (alreadyProcessed) {
+      if (!inserted) {
+        // Already processed
         console.info(
           `[webhook] Skipping already-processed tx: ${tx.signature}`
         );
         continue;
       }
-
-      // Mark as processed early to prevent race conditions
-      await markWebhookProcessed(tx.signature).catch((err) => {
-        console.error("[webhook] Failed to mark processed:", err);
-      });
 
       // Find vault owners from the transaction
       const ownerCandidates = extractOwnerCandidates([tx]);

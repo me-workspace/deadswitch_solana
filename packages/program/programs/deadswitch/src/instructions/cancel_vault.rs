@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::associated_token::{self, AssociatedToken};
 use anchor_spl::token::{self, CloseAccount, Token, TokenAccount, Transfer};
 
 use crate::constants::*;
@@ -73,17 +73,56 @@ pub fn handler<'info>(
     }
 
     // --- Transfer SPL tokens back to owner (via remaining accounts) ---
-    // remaining_accounts come in pairs: [vault_ata, owner_ata, mint, vault_ata, owner_ata, mint, ...]
+    // remaining_accounts come in triples: [vault_ata, owner_ata, mint, vault_ata, owner_ata, mint, ...]
+    // Each triple corresponds to a non-SOL asset in vault.asset_configs
     let remaining = &ctx.remaining_accounts;
-    let mut i = 0;
-    while i + 2 < remaining.len() {
-        let vault_ata_info = &remaining[i];
-        let owner_ata_info = &remaining[i + 1];
-        let _mint_info = &remaining[i + 2];
+    let mut ri = 0;
 
-        // Deserialize vault ATA to get balance
+    // Collect SPL asset mints for validation
+    let spl_mints: Vec<Pubkey> = (0..vault.num_assets as usize)
+        .filter(|&idx| vault.asset_configs[idx].mint != Pubkey::default())
+        .map(|idx| vault.asset_configs[idx].mint)
+        .collect();
+
+    for expected_mint in spl_mints.iter() {
+        require!(
+            ri + 2 < remaining.len(),
+            DeadswitchError::InsufficientRemainingAccounts
+        );
+
+        let vault_ata_info = &remaining[ri];
+        let owner_ata_info = &remaining[ri + 1];
+        let mint_info = &remaining[ri + 2];
+
+        // Validate mint account key matches the expected asset mint
+        require!(
+            mint_info.key() == *expected_mint,
+            DeadswitchError::MintMismatch
+        );
+
+        // Deserialize vault ATA and validate
         let vault_ata: Account<TokenAccount> =
             Account::try_from(vault_ata_info)?;
+
+        // Validate vault ATA ownership and mint
+        require!(
+            vault_ata.owner == vault_key,
+            DeadswitchError::InvalidTokenAccountOwner
+        );
+        require!(
+            vault_ata.mint == *expected_mint,
+            DeadswitchError::MintMismatch
+        );
+
+        // Validate owner ATA is canonical for owner + mint
+        let expected_owner_ata = associated_token::get_associated_token_address(
+            &owner.key(),
+            expected_mint,
+        );
+        require!(
+            owner_ata_info.key() == expected_owner_ata,
+            DeadswitchError::InvalidAssociatedTokenAccount
+        );
 
         if vault_ata.amount > 0 {
             // Transfer all tokens to owner ATA
@@ -112,7 +151,7 @@ pub fn handler<'info>(
             signer_seeds,
         ))?;
 
-        i += 3;
+        ri += 3;
     }
 
     // --- Update vault status ---

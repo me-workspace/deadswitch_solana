@@ -1,4 +1,5 @@
 import { type NextRequest } from "next/server";
+import { timingSafeEqual } from "crypto";
 import type { ApiResponse, ApiError } from "@deadswitch/sdk";
 import {
   getActiveVaultsForAlerts,
@@ -16,6 +17,18 @@ export const dynamic = "force-dynamic";
 /** Alert threshold levels ordered from lowest to highest */
 const THRESHOLDS = [50, 75, 90, 100] as const;
 type AlertThreshold = (typeof THRESHOLDS)[number];
+
+/**
+ * Constant-time string comparison to prevent timing attacks.
+ *
+ * @param a - First string
+ * @param b - Second string
+ * @returns True if both strings are equal
+ */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 /** Result summary for a single vault alert check */
 interface VaultAlertResult {
@@ -103,7 +116,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     ? authHeader.slice(7).trim()
     : authHeader?.trim() ?? "";
 
-  if (token !== cronSecret) {
+  if (!safeCompare(token, cronSecret)) {
     const error: ApiError = {
       error: "Unauthorized",
       code: "UNAUTHORIZED",
@@ -265,14 +278,12 @@ export async function GET(request: NextRequest): Promise<Response> {
     alertsSent: number;
     alertsSkipped: number;
     cleanedWebhooks: number;
-    details: VaultAlertResult[];
   }> = {
     data: {
       processed: vaultsWithAlerts.length,
       alertsSent,
       alertsSkipped,
       cleanedWebhooks,
-      details: results,
     },
     meta: { version: "0.1.0", timestamp: Date.now() },
   };

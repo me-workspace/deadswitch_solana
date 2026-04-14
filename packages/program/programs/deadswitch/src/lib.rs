@@ -52,6 +52,7 @@ pub mod deadswitch {
         grace_period: Option<i64>,
         crank_fee_bps: Option<u16>,
         beneficiaries: Option<Vec<BeneficiaryInput>>,
+        heartbeat_authority: Option<Pubkey>,
     ) -> Result<()> {
         instructions::update_vault::handler(
             ctx,
@@ -61,6 +62,7 @@ pub mod deadswitch {
             grace_period,
             crank_fee_bps,
             beneficiaries,
+            heartbeat_authority,
         )
     }
 

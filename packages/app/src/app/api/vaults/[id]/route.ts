@@ -41,8 +41,11 @@ const paramSchema = z.object({
 // CORS headers
 // ---------------------------------------------------------------------------
 
+const ALLOWED_ORIGIN =
+  process.env.NEXT_PUBLIC_APP_URL || "https://onpay.id";
+
 const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };

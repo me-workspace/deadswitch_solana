@@ -3,6 +3,7 @@ import { PublicKey } from "@solana/web3.js";
 import { z } from "zod";
 import type { ApiResponse, ApiError } from "@deadswitch/sdk";
 import { registerWebhook } from "@/lib/helius/webhook";
+import { getVaultsByOwner } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +27,6 @@ const bodySchema = z.object({
       },
       { message: "Invalid Solana public key (base58)" }
     ),
-  webhookUrl: z
-    .string()
-    .url()
-    .optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -45,7 +42,6 @@ const bodySchema = z.object({
  *
  * Body:
  *   - `ownerWallet` -- Base58-encoded wallet address to monitor
- *   - `webhookUrl`  -- (optional) Override the default webhook endpoint URL
  */
 export async function POST(request: NextRequest): Promise<Response> {
   // Parse body
@@ -70,11 +66,33 @@ export async function POST(request: NextRequest): Promise<Response> {
     return Response.json(error, { status: 400 });
   }
 
-  const { ownerWallet, webhookUrl } = parsed.data;
+  const { ownerWallet } = parsed.data;
 
-  // Determine the webhook URL to register with Helius
+  // Verify that the owner has at least one active vault in the DB
+  try {
+    const ownerVaults = await getVaultsByOwner(ownerWallet);
+    const activeVaults = ownerVaults.filter(
+      (v) => v.status === "active" || v.status === "warning"
+    );
+    if (activeVaults.length === 0) {
+      const error: ApiError = {
+        error: "No active vaults found for this wallet. Create a vault first.",
+        code: "UNAUTHORIZED",
+      };
+      return Response.json(error, { status: 403 });
+    }
+  } catch (err) {
+    console.error("[webhook-register] Failed to verify owner vaults:", err);
+    const error: ApiError = {
+      error: "Failed to verify wallet ownership",
+      code: "DB_ERROR",
+    };
+    return Response.json(error, { status: 500 });
+  }
+
+  // Always use the app's own webhook URL — never accept user-provided URLs
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://deadswitch.xyz";
-  const targetUrl = webhookUrl ?? `${appUrl}/api/webhooks/helius`;
+  const targetUrl = `${appUrl}/api/webhooks/helius`;
 
   // Register the webhook with Helius
   try {
@@ -96,11 +114,8 @@ export async function POST(request: NextRequest): Promise<Response> {
   } catch (err) {
     console.error("[webhook-register] Failed to register webhook:", err);
 
-    const errorMessage =
-      err instanceof Error ? err.message : "Unknown error registering webhook";
-
     const error: ApiError = {
-      error: `Webhook registration failed: ${errorMessage}`,
+      error: "Failed to register webhook. Please try again later.",
       code: "WEBHOOK_ERROR",
     };
 

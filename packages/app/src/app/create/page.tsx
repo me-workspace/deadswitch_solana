@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 import { Shield, ArrowLeft, ArrowRight, Loader2, CheckCircle, ExternalLink } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -24,7 +24,9 @@ import {
   truncateAddress,
   parseAnchorError,
   cn,
+  decimalToSmallestUnit,
 } from "@/lib/utils";
+import { TOKEN_MINTS, NATIVE_SOL_MINT } from "@deadswitch/sdk";
 import { buildCreateVaultTx, type CreateVaultParams } from "@/lib/solana/instructions";
 
 const WalletMultiButton = dynamic(
@@ -62,11 +64,13 @@ const GRACE_PRESETS = [
   { days: 30, label: "30 days" },
 ] as const;
 
-/** Default devnet token mints */
+/** Token mints sourced from SDK constants */
+const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK as "devnet" | "mainnet") || "devnet";
+
 const DEFAULT_DEPOSITS: AssetDeposit[] = [
-  { mint: PublicKey.default.toBase58(), symbol: "SOL", amount: "", decimals: 9 },
-  { mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU", symbol: "USDC", amount: "", decimals: 6 },
-  { mint: "EJwZgeZrdC8TXTQbQBoL6bfuAnFUQcWQoKjE2RwW5Qo5", symbol: "USDT", amount: "", decimals: 6 },
+  { mint: NATIVE_SOL_MINT.toBase58(), symbol: "SOL", amount: "", decimals: 9 },
+  { mint: TOKEN_MINTS[network].USDC.toBase58(), symbol: "USDC", amount: "", decimals: 6 },
+  { mint: TOKEN_MINTS[network].USDT.toBase58(), symbol: "USDT", amount: "", decimals: 6 },
 ];
 
 /**
@@ -206,19 +210,18 @@ export default function CreateVaultPage() {
 
   const handleSubmit = useCallback(async () => {
     if (!publicKey || !connected || isSubmitting) return;
+    if (!step1Valid || !step2Valid || !step3Valid || !step4Valid) return;
 
     setIsSubmitting(true);
     showToast("pending", "Creating vault... Please approve the transaction in your wallet.");
 
     try {
-      // Generate a unique vault ID from current timestamp
-      const vaultId = new BN(Date.now());
+      // Use timestamp * 1000 + random to prevent collisions
+      const vaultId = new BN(Date.now() * 1000 + Math.floor(Math.random() * 1000));
 
-      // Build SOL deposit amount
+      // Build SOL deposit amount using decimal-safe conversion
       const solDeposit = deposits.find((d) => d.symbol === "SOL");
-      const solLamports = solDeposit
-        ? new BN(Math.floor((parseFloat(solDeposit.amount) || 0) * LAMPORTS_PER_SOL))
-        : new BN(0);
+      const solLamports = new BN(decimalToSmallestUnit(solDeposit?.amount || "0", 9));
 
       // Build beneficiary inputs
       const beneficiaryInputs = beneficiaries.map((b) => ({
@@ -246,6 +249,13 @@ export default function CreateVaultPage() {
       const tx = await buildCreateVaultTx(params);
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
       tx.feePayer = publicKey;
+
+      // Simulate first to catch errors without spending gas
+      const simulation = await connection.simulateTransaction(tx);
+      if (simulation.value.err) {
+        const simError = JSON.stringify(simulation.value.err);
+        throw new Error(`Transaction simulation failed: ${simError}`);
+      }
 
       const signature = await sendTransaction(tx, connection);
 
@@ -285,9 +295,7 @@ export default function CreateVaultPage() {
               .map((d) => ({
                 mint: d.mint,
                 symbol: d.symbol,
-                amount: String(
-                  Math.floor(parseFloat(d.amount) * Math.pow(10, d.decimals))
-                ),
+                amount: decimalToSmallestUnit(d.amount, d.decimals),
                 decimals: d.decimals,
               })),
           }),
@@ -313,12 +321,17 @@ export default function CreateVaultPage() {
     } catch (err) {
       console.error("Vault creation failed:", err);
       showToast("error", parseAnchorError(err));
+    } finally {
       setIsSubmitting(false);
     }
   }, [
     publicKey,
     connected,
     isSubmitting,
+    step1Valid,
+    step2Valid,
+    step3Valid,
+    step4Valid,
     deposits,
     beneficiaries,
     vaultName,

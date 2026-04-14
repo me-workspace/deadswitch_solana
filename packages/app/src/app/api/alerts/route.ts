@@ -30,6 +30,21 @@ const bodySchema = z.object({
       },
       { message: "Invalid vault public key (base58)" }
     ),
+  ownerPubkey: z
+    .string()
+    .min(32)
+    .max(44)
+    .refine(
+      (val) => {
+        try {
+          new PublicKey(val);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { message: "Invalid owner public key (base58)" }
+    ),
   email: z
     .string()
     .email("Invalid email address")
@@ -74,7 +89,7 @@ export async function PUT(request: NextRequest): Promise<Response> {
     return Response.json(error, { status: 400 });
   }
 
-  const { vaultPublicKey, email, enabled } = parsed.data;
+  const { vaultPublicKey, ownerPubkey, email, enabled } = parsed.data;
 
   // Look up the vault in DB
   let dbVault;
@@ -96,6 +111,15 @@ export async function PUT(request: NextRequest): Promise<Response> {
       code: "NOT_FOUND",
     };
     return Response.json(error, { status: 404 });
+  }
+
+  // Verify the caller is the vault owner
+  if (dbVault.ownerPubkey !== ownerPubkey) {
+    const error: ApiError = {
+      error: "Only the vault owner can modify alert settings",
+      code: "UNAUTHORIZED",
+    };
+    return Response.json(error, { status: 403 });
   }
 
   // Upsert alert config

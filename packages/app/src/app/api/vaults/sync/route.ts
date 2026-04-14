@@ -3,6 +3,7 @@ import { PublicKey } from "@solana/web3.js";
 import { z } from "zod";
 import type { ApiResponse, ApiError } from "@deadswitch/sdk";
 import { upsertVault, logHeartbeat } from "@/lib/db/queries";
+import { getReadonlyProgram } from "@/lib/solana/program";
 
 export const dynamic = "force-dynamic";
 
@@ -111,6 +112,52 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   const data = parsed.data;
+
+  // Verify the vault exists onchain and the owner matches
+  try {
+    const program = getReadonlyProgram();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const vaultAccount = (program.account as Record<string, any>)["vault"];
+    const onchainData = await vaultAccount.fetch(
+      new PublicKey(data.vaultPubkey)
+    );
+
+    if (!onchainData) {
+      const error: ApiError = {
+        error: "Vault not found onchain",
+        code: "NOT_FOUND",
+      };
+      return Response.json(error, { status: 404 });
+    }
+
+    const onchainOwner = (onchainData.owner as PublicKey).toBase58();
+    if (onchainOwner !== data.ownerPubkey) {
+      const error: ApiError = {
+        error: "Owner does not match onchain vault owner",
+        code: "UNAUTHORIZED",
+      };
+      return Response.json(error, { status: 403 });
+    }
+  } catch (err) {
+    // If the account doesn't exist, Anchor throws an error
+    const message = err instanceof Error ? err.message : String(err);
+    if (
+      message.includes("Account does not exist") ||
+      message.includes("could not find")
+    ) {
+      const error: ApiError = {
+        error: "Vault not found onchain",
+        code: "NOT_FOUND",
+      };
+      return Response.json(error, { status: 404 });
+    }
+    console.error("[vault-sync] Failed to verify vault onchain:", err);
+    const error: ApiError = {
+      error: "Failed to verify vault onchain",
+      code: "ONCHAIN_ERROR",
+    };
+    return Response.json(error, { status: 502 });
+  }
 
   // Upsert the vault into the database
   let vault;

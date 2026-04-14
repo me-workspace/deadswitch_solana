@@ -1,4 +1,4 @@
-import { eq, and, lt, desc, inArray } from "drizzle-orm";
+import { eq, and, lt, desc, inArray, or } from "drizzle-orm";
 import { getDb } from "./index";
 import {
   vaults,
@@ -290,19 +290,25 @@ export async function isWebhookProcessed(
 }
 
 /**
- * Mark a transaction signature as processed.
+ * Atomically mark a transaction signature as processed.
+ * Uses INSERT ... ON CONFLICT DO NOTHING and checks whether a row
+ * was actually inserted to avoid race conditions.
  *
  * @param txSignature - Solana transaction signature
+ * @returns True if the row was newly inserted; false if it already existed
  */
 export async function markWebhookProcessed(
   txSignature: string
-): Promise<void> {
+): Promise<boolean> {
   const db = getDb();
 
-  await db
+  const result = await db
     .insert(processedWebhooks)
     .values({ txSignature })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning();
+
+  return result.length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -406,7 +412,7 @@ export async function getActiveVaultsForAlerts(): Promise<
     .innerJoin(alertConfigs, eq(vaults.id, alertConfigs.vaultId))
     .where(
       and(
-        eq(vaults.status, "active"),
+        or(eq(vaults.status, "active"), eq(vaults.status, "warning")),
         eq(alertConfigs.enabled, true)
       )
     );

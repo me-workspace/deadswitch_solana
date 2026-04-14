@@ -50,9 +50,6 @@ pub enum DeadswitchError {
     #[msg("Vault is not eligible for execution")]
     VaultNotTriggered,
 
-    #[msg("Heartbeat timestamp is in the future")]
-    FutureHeartbeat,
-
     #[msg("Heartbeat timestamp is not newer than last activity")]
     StaleHeartbeat,
 
@@ -70,4 +67,16 @@ pub enum DeadswitchError {
 
     #[msg("Beneficiary share is zero")]
     ZeroShare,
+
+    #[msg("Mint account does not match expected mint")]
+    MintMismatch,
+
+    #[msg("Insufficient remaining accounts for operation")]
+    InsufficientRemainingAccounts,
+
+    #[msg("Invalid token account ownership")]
+    InvalidTokenAccountOwner,
+
+    #[msg("Invalid associated token account")]
+    InvalidAssociatedTokenAccount,
 }

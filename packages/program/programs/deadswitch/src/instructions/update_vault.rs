@@ -33,6 +33,7 @@ pub fn handler(
     grace_period: Option<i64>,
     crank_fee_bps: Option<u16>,
     beneficiaries: Option<Vec<BeneficiaryInput>>,
+    heartbeat_authority: Option<Pubkey>,
 ) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
     let owner_key = ctx.accounts.owner.key();
@@ -150,6 +151,11 @@ pub fn handler(
                 name: name_arr,
             };
         }
+    }
+
+    // --- Update heartbeat authority ---
+    if let Some(new_authority) = heartbeat_authority {
+        vault.heartbeat_authority = new_authority;
     }
 
     // --- Reset inactivity timer (proof of life) ---
