@@ -8,9 +8,14 @@ node_modules/
 out/
 dist/
 build/
-target/
 
-# Anchor
+# Anchor / Rust builds — keep IDL, types, and keypair
+packages/program/target/release/
+packages/program/target/debug/
+packages/program/target/deploy/deadswitch.so
+packages/program/target/sbf-solana-solana/
+packages/program/target/.rustc_info.json
+packages/program/target/CACHEDIR.TAG
 .anchor/
 test-ledger/
 
@@ -51,4 +56,5 @@ yarn-error.log*
 *private*key*
 *secret*
 *.pem
-keypair.json
+# Keep Anchor program keypair (it's a devnet deploy key, not a wallet)
+# packages/program/target/deploy/deadswitch-keypair.json is tracked

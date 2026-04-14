@@ -1,0 +1,662 @@
+{
+  "address": "14S2ouXUde99HRRrSmMUcqMCUpMkd2NngjMmnz21mXKh",
+  "metadata": {
+    "name": "deadswitch",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Onchain inheritance & dead man's switch protocol on Solana"
+  },
+  "instructions": [
+    {
+      "name": "createVault",
+      "discriminator": [
+        29,
+        237,
+        247,
+        208,
+        193,
+        82,
+        54,
+        135
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "vaultId"
+              }
+            ]
+          }
+        },
+        {
+          "name": "heartbeatAuthority"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "vaultId",
+          "type": "u64"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "note",
+          "type": "string"
+        },
+        {
+          "name": "inactivityWindow",
+          "type": "i64"
+        },
+        {
+          "name": "gracePeriod",
+          "type": "i64"
+        },
+        {
+          "name": "crankFeeBps",
+          "type": "u16"
+        },
+        {
+          "name": "beneficiaries",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "beneficiaryInput"
+              }
+            }
+          }
+        },
+        {
+          "name": "solDepositLamports",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "recordHeartbeat",
+      "discriminator": [
+        109,
+        43,
+        126,
+        223,
+        32,
+        70,
+        78,
+        82
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "updateVault",
+      "discriminator": [
+        67,
+        229,
+        185,
+        188,
+        226,
+        11,
+        210,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": {
+            "option": "string"
+          }
+        },
+        {
+          "name": "note",
+          "type": {
+            "option": "string"
+          }
+        },
+        {
+          "name": "inactivityWindow",
+          "type": {
+            "option": "i64"
+          }
+        },
+        {
+          "name": "gracePeriod",
+          "type": {
+            "option": "i64"
+          }
+        },
+        {
+          "name": "crankFeeBps",
+          "type": {
+            "option": "u16"
+          }
+        },
+        {
+          "name": "beneficiaries",
+          "type": {
+            "option": {
+              "vec": {
+                "defined": {
+                  "name": "beneficiaryInput"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "topUpVault",
+      "discriminator": [
+        211,
+        201,
+        198,
+        72,
+        45,
+        101,
+        12,
+        10
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associatedTokenProgram",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        }
+      ],
+      "args": [
+        {
+          "name": "solAmount",
+          "type": "u64"
+        },
+        {
+          "name": "splDeposits",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "splDeposit"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "cancelVault",
+      "discriminator": [
+        150,
+        95,
+        141,
+        252,
+        158,
+        53,
+        60,
+        102
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associatedTokenProgram",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "executeRedistribution",
+      "discriminator": [
+        95,
+        43,
+        225,
+        99,
+        171,
+        94,
+        200,
+        65
+      ],
+      "accounts": [
+        {
+          "name": "crank",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "owner",
+          "writable": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associatedTokenProgram",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "vault",
+      "discriminator": [
+        211,
+        8,
+        232,
+        43,
+        2,
+        152,
+        117,
+        119
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "invalidInactivityWindow",
+      "msg": "Inactivity window must be between 30 and 365 days"
+    },
+    {
+      "code": 6001,
+      "name": "invalidGracePeriod",
+      "msg": "Grace period must be between 1 and 30 days"
+    },
+    {
+      "code": 6002,
+      "name": "invalidCrankFee",
+      "msg": "Crank fee must be between 0.01% and 5%"
+    },
+    {
+      "code": 6003,
+      "name": "sharesNotOneHundredPercent",
+      "msg": "Beneficiary shares must total exactly 100%"
+    },
+    {
+      "code": 6004,
+      "name": "tooManyBeneficiaries",
+      "msg": "Too many beneficiaries (max 10)"
+    },
+    {
+      "code": 6005,
+      "name": "noBeneficiaries",
+      "msg": "At least one beneficiary is required"
+    },
+    {
+      "code": 6006,
+      "name": "tooManyAssets",
+      "msg": "Too many assets (max 20)"
+    },
+    {
+      "code": 6007,
+      "name": "noAssets",
+      "msg": "At least one asset is required"
+    },
+    {
+      "code": 6008,
+      "name": "vaultNameTooLong",
+      "msg": "Vault name is too long (max 64 characters)"
+    },
+    {
+      "code": 6009,
+      "name": "noteTooLong",
+      "msg": "Note is too long (max 256 characters)"
+    },
+    {
+      "code": 6010,
+      "name": "beneficiaryNameTooLong",
+      "msg": "Beneficiary name is too long (max 32 characters)"
+    },
+    {
+      "code": 6011,
+      "name": "selfBeneficiary",
+      "msg": "Cannot use your own address as a beneficiary"
+    },
+    {
+      "code": 6012,
+      "name": "duplicateBeneficiary",
+      "msg": "Duplicate beneficiary address"
+    },
+    {
+      "code": 6013,
+      "name": "invalidBeneficiary",
+      "msg": "Invalid beneficiary address"
+    },
+    {
+      "code": 6014,
+      "name": "vaultNotModifiable",
+      "msg": "Vault is not in a modifiable state"
+    },
+    {
+      "code": 6015,
+      "name": "vaultNotTriggered",
+      "msg": "Vault is not eligible for execution"
+    },
+    {
+      "code": 6016,
+      "name": "futureHeartbeat",
+      "msg": "Heartbeat timestamp is in the future"
+    },
+    {
+      "code": 6017,
+      "name": "staleHeartbeat",
+      "msg": "Heartbeat timestamp is not newer than last activity"
+    },
+    {
+      "code": 6018,
+      "name": "unauthorized",
+      "msg": "Unauthorized — only the vault owner can perform this action"
+    },
+    {
+      "code": 6019,
+      "name": "unauthorizedHeartbeat",
+      "msg": "Unauthorized — invalid heartbeat authority"
+    },
+    {
+      "code": 6020,
+      "name": "insufficientDeposit",
+      "msg": "Insufficient deposit amount"
+    },
+    {
+      "code": 6021,
+      "name": "arithmeticOverflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6022,
+      "name": "zeroShare",
+      "msg": "Beneficiary share is zero"
+    }
+  ],
+  "types": [
+    {
+      "name": "beneficiaryInput",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "shareBps",
+            "type": "u16"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "splDeposit",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "beneficiary",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "shareBps",
+            "type": "u16"
+          },
+          {
+            "name": "name",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "assetConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vault",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "vaultId",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "heartbeatAuthority",
+            "type": "pubkey"
+          },
+          {
+            "name": "inactivityWindow",
+            "type": "i64"
+          },
+          {
+            "name": "gracePeriod",
+            "type": "i64"
+          },
+          {
+            "name": "crankFeeBps",
+            "type": "u16"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "vaultStatus"
+              }
+            }
+          },
+          {
+            "name": "lastActivity",
+            "type": "i64"
+          },
+          {
+            "name": "createdAt",
+            "type": "i64"
+          },
+          {
+            "name": "updatedAt",
+            "type": "i64"
+          },
+          {
+            "name": "name",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "note",
+            "type": {
+              "array": [
+                "u8",
+                256
+              ]
+            }
+          },
+          {
+            "name": "numBeneficiaries",
+            "type": "u8"
+          },
+          {
+            "name": "numAssets",
+            "type": "u8"
+          },
+          {
+            "name": "beneficiaries",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "beneficiary"
+                  }
+                },
+                10
+              ]
+            }
+          },
+          {
+            "name": "assetConfigs",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "assetConfig"
+                  }
+                },
+                20
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "vaultStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "active"
+          },
+          {
+            "name": "executed"
+          },
+          {
+            "name": "cancelled"
+          }
+        ]
+      }
+    }
+  ]
+}

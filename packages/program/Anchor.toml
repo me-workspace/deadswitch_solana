@@ -1,0 +1,25 @@
+[features]
+seeds = false
+skip-lint = false
+
+[programs.localnet]
+deadswitch = "14S2ouXUde99HRRrSmMUcqMCUpMkd2NngjMmnz21mXKh"
+
+[programs.devnet]
+deadswitch = "14S2ouXUde99HRRrSmMUcqMCUpMkd2NngjMmnz21mXKh"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "npx ts-mocha -p ./tsconfig.json -t 1000000 ../../tests/**/*.test.ts"
+
+[test]
+startup_wait = 5000
+
+[test.validator]
+url = "https://api.devnet.solana.com"
