@@ -12,7 +12,9 @@
     "@coral-xyz/anchor": "^0.30.1",
     "@deadswitch/sdk": "*",
     "@solana/web3.js": "^1.95.0",
-    "@solana/spl-token": "^0.4.0"
+    "@solana/spl-token": "^0.4.0",
+    "bs58": "^6.0.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "tsx": "^4.16.0",

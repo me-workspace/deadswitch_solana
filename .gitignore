@@ -14,6 +14,7 @@ packages/program/target/release/
 packages/program/target/debug/
 packages/program/target/deploy/deadswitch.so
 packages/program/target/sbf-solana-solana/
+packages/program/target/sbpf-solana-solana/
 packages/program/target/.rustc_info.json
 packages/program/target/CACHEDIR.TAG
 .anchor/
