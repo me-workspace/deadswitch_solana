@@ -99,14 +99,7 @@
       "discriminator": []
     }
   ],
-  "events": [
-    { "name": "vaultCreated", "discriminator": [] },
-    { "name": "heartbeatRecorded", "discriminator": [] },
-    { "name": "vaultUpdated", "discriminator": [] },
-    { "name": "vaultToppedUp", "discriminator": [] },
-    { "name": "vaultCancelled", "discriminator": [] },
-    { "name": "vaultExecuted", "discriminator": [] }
-  ],
+  "events": [],
   "errors": [
     { "code": 6000, "name": "invalidInactivityWindow", "msg": "Inactivity window must be between 30 and 365 days" },
     { "code": 6001, "name": "invalidGracePeriod", "msg": "Grace period must be between 1 and 30 days" },
