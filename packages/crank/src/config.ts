@@ -1,9 +1,6 @@
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { z } from "zod";
 
-// bs58 v6 is ESM-only; use require for CJS compat
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const bs58: { decode: (input: string) => Uint8Array } = require("bs58");
 
 /**
  * Zod schema for crank bot environment variables.
@@ -79,15 +76,24 @@ export function loadConfig(): CrankConfig {
 
   const env = result.data;
 
-  // Parse the base58 private key into a Keypair
+  // Parse the private key into a Keypair
+  // Supports JSON byte array [1,2,3,...] or base64 encoded string
   let crankKeypair: Keypair;
   try {
-    const secretKey = bs58.decode(env.CRANK_WALLET_PRIVATE_KEY);
+    const keyStr = env.CRANK_WALLET_PRIVATE_KEY.trim();
+    let secretKey: Uint8Array;
+    if (keyStr.startsWith("[")) {
+      // JSON byte array format
+      secretKey = Uint8Array.from(JSON.parse(keyStr) as number[]);
+    } else {
+      // Base64 encoded format
+      secretKey = Uint8Array.from(Buffer.from(keyStr, "base64"));
+    }
     crankKeypair = Keypair.fromSecretKey(secretKey);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `Failed to parse CRANK_WALLET_PRIVATE_KEY as a base58-encoded Keypair: ${message}`
+      `Failed to parse CRANK_WALLET_PRIVATE_KEY (JSON array or base64): ${message}`
     );
   }
 
